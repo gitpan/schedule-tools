@@ -1,0 +1,39 @@
+#!/usr/local/bin/perl
+#
+# create a test schedule for use in a Schedule::Oncall
+# configuration file
+#
+# Jim Trocki
+#
+# $Id: make-test-sched 1.1 Thu, 18 Jul 2002 10:28:32 -0400 trockij $
+use strict;
+
+use Getopt::Std;
+
+my %opt;
+getopts ('', \%opt);
+
+#
+# stagger these names to create a test schedule
+#
+my @addrs = ("joeb", "johnd", "homers", "janed", "gwb");
+
+my $i = 0;
+
+print "     ,    Monday,   Tuesday, Wednesday, Thursday,     Friday,  Saturday,    Sunday\n\n";
+
+for (my $hr = 0; $hr < 24; $hr++)
+{
+    printf ("%02d:00,", $hr);
+
+    my @p = ();
+
+    for (my $d = 0; $d < 7; $d++)
+    {
+    	$i = 0 if ($i == @addrs);
+	push @p, sprintf ("%10s", $addrs[$i]);
+	$i++;
+    }
+
+    print join (",", @p), "\n";
+}

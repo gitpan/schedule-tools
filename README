@@ -1,0 +1,28 @@
+These tools provide on-call schedule functionality by using the
+Schedule::Oncall module.
+
+An example schedule is named "test-sched".
+
+sched-report
+	generates on-call schedule tables and identifies the individual
+	who is on call. also provides a summary report which does not
+	show the table, but instead only the on-call person and the
+	associated contact information.
+
+	requires the following modules:
+
+	Schedule::Oncall
+	Date::Manip
+
+sched-populate
+    	produces "person" entries for a schedule by querying an ldap
+	server. the output of this can be directly included as part
+	of a schedule configuration file.
+
+	requires this module:
+
+    	Net::LDAP
+
+
+
+Jim Trocki <trockij@linux.kernel.org>

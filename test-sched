@@ -1,0 +1,176 @@
+# $Id: test-sched 1.5 Thu, 18 Jul 2002 10:33:50 -0400 trockij $
+
+#
+# Put people's usernames, real names, and
+# numeric pager numbers here:
+#
+begin person joeb
+    fullname joe blow
+    pager 555-1222
+    email joeblow@x_yyz.com
+end person
+
+begin person johnd
+    fullname john doe
+    pager 555-1333
+    email johnd@x_yyz.com
+end person
+
+begin person homers
+    fullname homer simpson
+    pager 555-1444
+    email homers@x_yyz.com
+end person
+
+begin person janed
+    fullname jane doe
+    pager 555-5555
+    email janed@x_yyz.com
+end person
+
+begin person gwb
+    fullname george dubbya bush
+    pager 555-6666
+    email gwb@x_yyz.com
+end person
+
+#
+# report configs for sched-report
+#
+begin text sched-report-html-head
+<html>
+<head>
+<title>On-Call Schedule</title>
+</head>
+<p>
+Generated on ${date} from ${files}<br>
+oncall: ${fullname} (${username})<br>
+email : ${email}<br>
+pager : ${pager}<br>
+</p>
+<body>
+end text
+
+
+#
+# html trailer
+#
+begin text sched-report-html-tail
+</body>
+</html>
+end text
+
+
+#
+# html table
+#
+begin text sched-report-table-head
+<table border=1 width=100%>
+<th>Hour <th>Monday <th>Tuesday <th> Wednesday <th> Thursday <th> Friday <th> Saturday <th> Sunday
+end text
+
+begin text sched-report-table-tail
+</table>
+end text
+
+#
+# text header
+#
+begin text sched-report-text-head
+--------------------------------------------------------------------------------------------------
+On-Call Schedule
+--------------------------------------------------------------------------------------------------
+Generated on ${date} from ${files}
+oncall: ${fullname} (${username})
+email : ${email}
+pager : ${pager}
+
+end text
+
+
+#
+# text footer
+#
+begin text sched-report-text-tail
+
+end text
+
+
+#
+# summary report
+#
+begin text sched-report-summary
+---------------------------------------------------------------------------
+On-Call Schedule
+---------------------------------------------------------------------------
+Generated on ${date} from ${files}
+oncall: ${fullname} (${username})
+email : ${email}
+pager : ${pager}
+cell  : ${cell}
+office: ${office}
+
+end text
+
+
+#
+# email responses for sched-mail
+#
+begin text sched-mail-reply-oncall
+From: ${email}
+To: ${sched-mail-reply-to}
+Subject: Your mail to oncall
+
+Thank you for your submission.
+
+Your message was forwarded to ${fullname}.
+
+The following is the contact information we have for this person:
+
+Name: ${fullname}
+Username: ${username}
+Email: ${email}
+Pager: ${pager}
+Phone: ${phone}
+
+end text
+
+begin text sched-mail-reply-no-oncall
+From: ${email}
+To: ${sched-mail-reply-to}
+Subject: Your mail to oncall
+
+Thank you for your submission.
+
+There is currently noone on call now. Your message was forwarded
+to ${email}.
+
+end text
+
+
+     ,    Monday,   Tuesday, Wednesday, Thursday,     Friday,  Saturday,    Sunday
+
+00:00,      joeb,     johnd,    homers,     janed,       gwb,      joeb,     johnd
+01:00,    homers,     janed,       gwb,      joeb,     johnd,    homers,     janed
+02:00,       gwb,      joeb,     johnd,    homers,     janed,       gwb,      joeb
+03:00,     johnd,    homers,     janed,       gwb,      joeb,     johnd,    homers
+04:00,     janed,       gwb,      joeb,     johnd,    homers,     janed,       gwb
+05:00,      joeb,     johnd,    homers,     janed,       gwb,      joeb,     johnd
+06:00,    homers,     janed,       gwb,      joeb,     johnd,    homers,     janed
+07:00,       gwb,      joeb,     johnd,    homers,     janed,       gwb,      joeb
+08:00,     johnd,    homers,     janed,       gwb,      joeb,     johnd,    homers
+09:00,     janed,       gwb,      joeb,     johnd,    homers,     janed,       gwb
+10:00,      joeb,     johnd,    homers,     janed,       gwb,      joeb,     johnd
+11:00,    homers,     janed,       gwb,      joeb,     johnd,    homers,     janed
+12:00,       gwb,      joeb,     johnd,    homers,     janed,       gwb,      joeb
+13:00,     johnd,    homers,     janed,       gwb,      joeb,     johnd,    homers
+14:00,     janed,       gwb,      joeb,     johnd,    homers,     janed,       gwb
+15:00,      joeb,     johnd,    homers,     janed,       gwb,      joeb,     johnd
+16:00,    homers,     janed,       gwb,      joeb,     johnd,    homers,     janed
+17:00,       gwb,      joeb,     johnd,    homers,     janed,       gwb,      joeb
+18:00,     johnd,    homers,     janed,       gwb,      joeb,     johnd,    homers
+19:00,     janed,       gwb,      joeb,     johnd,    homers,     janed,       gwb
+20:00,      joeb,     johnd,    homers,     janed,       gwb,      joeb,     johnd
+21:00,    homers,     janed,       gwb,      joeb,     johnd,    homers,     janed
+22:00,       gwb,      joeb,     johnd,    homers,     janed,       gwb,      joeb
+23:00,     johnd,    homers,     janed,       gwb,      joeb,     johnd,    homers

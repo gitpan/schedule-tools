@@ -1,0 +1,412 @@
+#!/usr/bin/perl
+#
+# generate text and html on-call schedule
+#
+# Copyright 2001-2002 Jim Trocki
+# Copyright 2001-2002 Transmeta Corporation
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+# $Id: sched-report 1.9 Thu, 18 Jul 2002 10:33:50 -0400 trockij $
+use strict;
+
+use Getopt::Std;
+use Date::Manip;
+use Schedule::Oncall;
+
+sub usage;
+sub show_table;
+sub show_summary;
+sub init_vars;
+sub substitute_text;
+
+my %opt;
+getopts ('st:hp:d:w:m:', \%opt);
+
+if ($opt{"h"})
+{
+    usage;
+}
+
+my $DATE = time;
+my $TYPE_HTML = 0;
+my $TYPE_TEXT = 1;
+my $TYPE = $TYPE_TEXT;
+my $DIR = "";
+
+#
+# @w must be global because of the "write" and
+# format STDOUT = stuff
+#
+my @w;
+
+#
+# validate arguments
+#
+if ($opt{"d"} ne "")
+{
+    my $d = ParseDate ($opt{"d"});
+    die "could not parse date\n" if (!defined $d);
+    $DATE = UnixDate ($d, '%s');
+}
+
+if ($opt{"w"} ne "" && $opt{"w"} !~ /^\d+$/)
+{
+    die "-w requires an integer argument\n";
+}
+
+if ($opt{"m"} ne "" && $opt{"m"} !~ /^\d+$/)
+{
+    die "-m requires an integer argument\n";
+}
+
+if (!$opt{"s"} && $opt{"t"} ne "")
+{
+    if ($opt{"t"} eq "html")
+    {
+	$TYPE = $TYPE_HTML;
+    }
+
+    elsif ($opt{"t"} eq "text")
+    {
+    	$TYPE = $TYPE_TEXT;
+    }
+
+    else
+    {
+    	die "-t must be 'text' or 'html'\n";
+    }
+}
+
+if ($ENV{"SCHED_ONCALL_PATH"} ne "")
+{
+    $DIR = $ENV{"SCHED_ONCALL_PATH"};
+}
+
+if ($opt{"p"})
+{
+    $DIR = $opt{"p"};
+}
+
+#
+# load tables
+#
+my $sched = new Schedule::Oncall;
+
+init_sched_vars ($sched);
+
+if (@ARGV == 0)
+{
+    $sched->load (
+    	"dir" => $DIR,
+	"date" => $DATE,
+	"week" => $opt{"w"},
+	"month" => $opt{"m"},
+    );
+
+    if ($sched->error ne "")
+    {
+	die "could not load schedule: " . $sched->error . "\n";
+    }
+}
+
+else
+{
+    foreach my $f (@ARGV)
+    {
+	$sched->load (
+	    "dir" => $DIR,
+	    "file" => $f,
+	    "date" => $DATE,
+	    "week" => $opt{"w"},
+	    "month" => $opt{"m"},
+	);
+
+	if ($sched->error ne "")
+	{
+	    die "could not load schedule $f: " . $sched->error . "\n";
+	}
+    }
+}
+
+#
+# initialize the oncall stuff
+#
+$sched->oncall ($DATE);
+
+$sched->substitute_text;
+
+#
+# summary or full table
+#
+if ($opt{"s"})
+{
+    show_summary ($sched, $DATE);
+}
+
+else
+{
+    show_table ($sched, $TYPE, $DATE);
+}
+
+exit;
+
+
+sub show_summary
+{
+    my ($sched, $date) = @_;
+
+    print $sched->{"text"}->{"sched-report-summary"};
+}
+
+
+sub show_table
+{
+    my ($sched, $type, $date) = @_;
+
+    my (@table) = $sched->schedule;
+
+    my @t = localtime ($date);
+    my $wday = $t[6];
+    my $date_mins = $t[2] * 60 + $t[1];
+
+    #
+    # table header
+    #
+    if ($type == $TYPE_HTML)
+    {
+	print $sched->{"text"}->{"sched-report-html-head"};
+
+	print $sched->{"text"}->{"sched-report-table-head"};
+    }
+
+    elsif ($type == $TYPE_TEXT)
+    {
+    	print $sched->{"text"}->{"sched-report-text-head"};
+    }
+
+    #
+    # table rows
+    #
+    for (my $min = $sched->{"earliest"}; $min < $sched->{"latest"}; $min += $sched->{"span"})
+    {
+	if ($type == $TYPE_HTML)
+	{
+	    print "<tr>\n";
+	    print "   <td> " . $sched->min_format ($min) . " </td>\n";
+	}
+
+	my $day_index = 1;
+
+	@w = ($sched->min_format ($min));
+
+    	for (my $day = 0; $day < 7; $day++)
+	{
+	    foreach my $entry (@{$table[$day_index]})
+	    {
+		my $hilight = 0;
+	    	if ($min >= $entry->[0] && $min <= $entry->[1])
+		{
+		    my $username = "nobody";
+		    if ($entry->[2] ne "")
+		    {
+		    	$username = $entry->[2];
+		    }
+		    if ($type == $TYPE_HTML)
+		    {
+			if ($day_index == $wday && $date_mins >= $entry->[0] && $date_mins <= $entry->[1])
+			{
+			    print "   <td> <B>$username</B> </td>\n";
+			}
+
+			else
+			{
+			    print "   <td> $username </td>\n";
+			}
+		    }
+
+		    elsif ($type == $TYPE_TEXT)
+		    {
+			if ($day_index == $wday && $date_mins >= $entry->[0] && $date_mins <= $entry->[1])
+			{
+			    push (@w, "*$username*");
+			}
+
+			else
+			{
+			    push (@w, $username);
+			}
+		    }
+		}
+	    }
+
+	    $day_index++;
+	    if ($day_index > 6)
+	    {
+		$day_index = 0;
+	    }
+	}
+
+	if ($type == $TYPE_HTML)
+	{
+	    print "</tr>\n";
+	}
+
+	elsif ($type == $TYPE_TEXT)
+	{
+	    write;
+	}
+    }
+
+    #
+    # end of table
+    #
+    if ($type == $TYPE_HTML)
+    {
+	print $sched->{"text"}->{"sched-report-table-tail"};
+
+	print $sched->{"text"}->{"sched-report-html-tail"};
+    }
+
+    elsif ($type == $TYPE_TEXT)
+    {
+    	print $sched->{"text"}->{"sched-report-text-tail"};
+    }
+
+    "";
+}
+
+
+sub usage
+{
+    print <<EOF;
+usage: ./sched-report [-h] [-s] [-w num] [-m num] [-d date]
+	[-p dir] [-t type] schedule [...schedule]
+
+    -h			this help
+    -w num		rotate "num" weeks
+    -m num		rotate "num" months
+    -d date		generate schedule for "date", or now if not specified
+    -p dir		path to schedule
+    -t type		output "type" schedule, either "text" or "html"
+    -s			output summary instead of the entire table
+
+    these text sections are used from the config files:
+
+    sched-report-text-head
+    sched-report-text-tail
+
+    sched-report-html-head
+    	must include <html>, <head>, and <body>
+
+    sched-report-html-tail
+    	must include </body> and </html>
+    
+    sched-report-table-head
+    	must include <table> and <th> tags, first column is hour,
+	second is monday.
+
+    sched-report-table-tail
+    	must include </table>
+
+    sched-report-summary
+    	used with -s option
+
+EOF
+    exit;
+}
+
+
+sub init_sched_vars
+{
+    my $sched = shift;
+
+    #
+    # html defaults
+    #
+    $sched->{"text-defaults"}->{"sched-report-html-head"} = <<'EOF';
+<html>
+<head>
+<title>On-Call Schedule</title>
+</head>
+<p>
+Generated on ${date} from ${files}<br>
+oncall: ${fullname} (${username})<br>
+email : ${email}<br>
+pager : ${pager}<br>
+</p>
+<body>
+EOF
+
+    $sched->{"text-defaults"}->{"sched-report-html-tail"} = <<'EOF';
+</body>
+</html>
+EOF
+
+    $sched->{"text-defaults"}->{"sched-report-table-head"} = <<'EOF';
+<table border=1 width=100%>
+<th>Hour <th>Monday <th>Tuesday <th> Wednesday <th> Thursday <th> Friday <th> Saturday <th> Sunday
+EOF
+
+    $sched->{"text-defaults"}->{"sched-report-table-tail"} = <<'EOF';
+</table>
+EOF
+
+    #
+    # text defaults
+    #
+    $sched->{"text-defaults"}->{"sched-report-text-head"} = <<'EOF';
+--------------------------------------------------------------------------------------------------
+On-Call Schedule
+--------------------------------------------------------------------------------------------------
+Generated on ${date} from ${files}
+oncall: ${fullname} (${username})
+email : ${email}
+pager : ${pager}
+
+EOF
+
+    $sched->{"text-defaults"}->{"sched-report-text-tail"} = <<'EOF';
+
+EOF
+
+    #
+    # summary
+    #
+    $sched->{"text-defaults"}->{"sched-report-summary"} = <<'EOF';
+---------------------------------------------------------------------------
+On-Call Schedule
+---------------------------------------------------------------------------
+Generated on ${date} from ${files}
+oncall: ${fullname} (${username})
+email : ${email}
+pager : ${pager}
+cell  : ${cell}
+office: ${office}
+
+EOF
+}
+
+
+format STDOUT_TOP =
+Time     Monday     Tuesday     Wednesday     Thursday      Friday       Saturday     Sunday
+--------------------------------------------------------------------------------------------------
+.
+
+format STDOUT =
+@<<<<<<< @<<<<<<<<< @<<<<<<<<<< @<<<<<<<<<<<< @<<<<<<<<<<<< @<<<<<<<<<<< @<<<<<<<<<<< @<<<<<<<<<<<
+@w
+.
+

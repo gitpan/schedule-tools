@@ -1,0 +1,387 @@
+#!/usr/bin/perl
+#
+# forward mail to the person oncall, send an acknowledgement
+# to the submitter, and optionally submit trouble ticket
+#
+# Copyright 2001-2002 Jim Trocki
+# Copyright 2001-2002 Transmeta Corporation
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+# $Id$
+use strict;
+
+use Getopt::Std;
+use Schedule::Oncall;
+use Date::Manip;
+
+sub usage;
+sub init_sched_vars;
+sub read_message;
+sub forward_to_oncall;
+sub send_reply;
+sub submit_ticket_gnats;
+
+my %opt;
+getopts ('hw:m:D:d:p:t:T:', \%opt);
+
+my $ADDR = "email";
+my $DIR;
+my $DATE = time;
+
+if ($opt{"d"} ne "")
+{
+    my $d = ParseDate ($opt{"d"});
+    die "could not parse date\n" if (!defined $d);
+    $DATE = UnixDate ($d, '%s');
+}
+
+if ($ENV{"SCHED_ONCALL_PATH"} ne "")
+{
+    $DIR = $ENV{"SCHED_ONCALL_PATH"};
+}
+
+if ($opt{"p"})
+{
+    $DIR = $opt{"p"};
+}
+
+#
+# load tables
+#
+my $sched = new Schedule::Oncall;
+
+init_sched_vars ($sched);
+
+if (@ARGV == 0)
+{
+    $sched->load (
+	"dir"	=> $DIR,
+	"date"	=> $DATE,
+	"week"	=> $opt{"w"},
+	"month"	=> $opt{"m"},
+    );
+
+    if ($sched->error ne "")
+    {
+    	die "could not load schedule: " . $sched->error . "\n";
+    }
+}
+
+else
+{
+    foreach my $f (@ARGV)
+    {
+	$sched->load (
+	    "dir"	=> $DIR,
+	    "file"	=> $f,
+	    "date"	=> $DATE,
+	    "week"	=> $opt{"w"},
+	    "month"	=> $opt{"m"},
+	);
+
+	if ($sched->error ne "")
+	{
+	    die "could not load schedule: " . $sched->error . "\n";
+	}
+    }
+}
+
+
+#
+# read in the email from stdin
+#
+my ($headers, $msg) = read_message;
+
+#
+# figure out reply to address
+#
+if ($headers->{"reply-to"})
+{
+    $sched->{"vars"}->{"sched-mail-reply-to"} = $headers->{"reply-to"};
+}
+
+elsif ($headers->{"from"})
+{
+    $sched->{"vars"}->{"sched-mail-reply-to"} = $headers->{"from"};
+}
+
+else
+{
+    if ($sched->{"vars"}->{"sched-mail-reply-to-default"} eq "")
+    {
+	#
+	# oh well, the mail should be forwarded but no reply will
+	# be sent
+	#
+    }
+
+    else
+    {
+	$sched->{"vars"}->{"sched-mail-reply-to"} = $sched->{"vars"}->{"sched-mail-reply-to-default"};
+    }
+}
+
+#
+# initialize the oncall stuff
+#
+$sched->oncall ($DATE);
+
+#
+# if noone is oncall, figure out the forwarding addr
+# or use postmaster as absolute last resort.
+#
+if ($sched->{"oncall-now"}->{"email"} eq "" ||
+	$sched->{"oncall-now"}->{"username"} eq "nobody")
+{
+    if ($opt{"D"} ne "")
+    {
+    	$sched->{"oncall-now"}->{"email"} = $opt{"D"};
+    }
+
+    elsif ($sched->{"vars"}->{"sched-mail-forwarding-default"} ne "")
+    {
+    	$sched->{"oncall-now"}->{"email"} = $sched->{"vars"}->{"sched-mail-forwarding-default"};
+    }
+
+    else
+    {
+    	$sched->{"oncall-now"}->{"email"} = "postmaster";
+    }
+}
+
+$sched->substitute_text;
+
+#
+# the reply email address for whomever sent the mail is
+#		$sched->{"vars"}->{"sched-mail-reply-to"}
+#    and it may or may not be set to something
+#
+# the email to which this submission will be forwarded is
+#		$sched->{"oncall-now"}->{"email"}
+#    and it will always be set to something
+#
+
+#
+# forward the message to oncall
+#
+if (!forward_to_oncall ($sched, $headers, $msg, $opt{"D"}))
+{
+    die "could not forward message to oncall\n";
+}
+
+#
+# send a reply to the submitter
+#
+if (!send_reply ($sched, $headers, $msg))
+{
+    die "could not send reply\n"
+}
+
+#
+# open a trouble ticket if required
+#
+if ($opt{"t"} eq "gnats")
+{
+    submit_ticket_gnats ($sched, $headers, $msg, $opt{"T"});
+}
+
+#
+# done
+#
+
+exit;
+
+
+sub forward_to_oncall
+{
+    my ($sched, $headers, $msg, $default) = @_;
+
+    open (OUT, "| /usr/lib/sendmail -oi -t") || return undef;
+
+    if ($sched->{"vars"}->{"sched-mail-reply-to"} ne "")
+    {
+    	print OUT "From: $sched->{'vars'}->{'sched-mail-reply-to'}\n";
+    }
+
+    print OUT <<"EOF";
+To: $sched->{"oncall-now"}->{"email"}
+Subject: ONCALL: $headers->{subject}
+
+EOF
+
+    for (my $i=0; $i < @{$msg}; $i++)
+    {
+    	if (!print OUT $msg->[$i])
+	{
+	    close (OUT);
+	    return undef;
+	}
+    }
+
+    close (OUT);
+}
+
+
+#
+# send a reply as defined by
+# $sched->{"sched-mail-reply-oncall"}
+# or
+# $sched->{"sched-mail-reply-no-oncall"}
+#
+sub send_reply
+{
+    my ($sched, $headers, $msg, $default) = @_;
+
+    open (OUT, "| /usr/lib/sendmail -oi -t") || return undef;
+
+    if ($sched->{"oncall-now"}->{"username"} eq "nobody")
+    {
+    	if (!print OUT $sched->{"text"}->{"sched-mail-reply-no-oncall"})
+	{
+	    close (OUT);
+	    return undef;
+	}
+    }
+
+    else
+    {
+    	if (!print OUT $sched->{"text"}->{"sched-mail-reply-oncall"})
+	{
+	    close (OUT);
+	    return undef;
+	}
+    }
+
+    close (OUT);
+}
+
+
+sub read_message
+{
+    my $hdr = undef;
+
+    my $header = {};
+    my $msg = [];
+
+    while (<STDIN>)
+    {
+    	last if (/^$/);
+
+	if (/^([!-~]+):\s*(.*)$/)
+	{
+	    $hdr = $1;
+	    $hdr =~ tr/A-Z/a-z/;
+	    $header->{$hdr} = $2;
+	    next;
+	}
+
+	elsif (defined ($hdr) && /^\s+(.*)$/)
+	{
+	    $header->{$hdr} .= " $1";
+	    next;
+	}
+
+	else
+	{
+	    # unknown header
+	}
+    }
+
+    while (<STDIN>)
+    {
+    	push @{$msg}, $_;
+    }
+
+    return ($header, $msg);
+}
+
+
+sub usage
+{
+    print <<EOF;
+usage: sched-mail [-h] [-w num] [-m num] [-D addr] [-p dir] [-d date] [schedule] [...schedule]
+Accept email from standard input and redirect the message to on-call
+staff, optionally submitting a trouble ticket.
+
+    -h		help
+    -p dir	path to schedule files
+    -d date	date 
+    -D addr	send mail to "addr" when nobody is on call or if
+    		submitter is not identifiable from the headers.
+    -w num	rotate "num" weeks
+    -m num	rotate "num" months
+    -t type	send ticket to "type" system (only "gnats" implemented now)
+    -T args	args to ticket submission routine
+
+This tool should be invoked as a mail alias. For sendmail, insert
+something similar to this in your aliases file:
+
+oncall: "| /usr/lib/schedule/sched-mail -d /usr/lib/schedule/conf -w 4"
+
+EOF
+
+    exit;
+}
+
+
+#
+# fill the schedule with defaults
+#
+sub init_sched_vars
+{
+    my $sched = shift;
+
+    $sched->{"text-defaults"}->{"sched-mail-reply-oncall"} = <<'EOF';
+From: ${email}
+To: ${sched-mail-reply-to}
+Subject: Your mail to oncall
+
+Thank you for your submission.
+
+Your message was forwarded to ${fullname}.
+
+The following is the contact information we have for this person:
+
+Name: ${fullname}
+Username: ${username}
+Email: ${email}
+Pager: ${pager}
+Phone: ${phone}
+
+EOF
+
+    $sched->{"text-defaults"}->{"sched-mail-reply-no-oncall"} = <<'EOF';
+From: ${email}
+To: ${sched-mail-reply-to}
+Subject: Your mail to oncall
+
+Thank you for your submission.
+
+There is currently noone on call now. Your message was forwarded
+to ${email}.
+
+EOF
+
+}
+
+
+#
+# open a trouble ticket with GNATS
+#
+sub submit_ticket_gnats
+{
+    my ($sched, $headers, $msg, $args) = @_;
+}

@@ -1,0 +1,44 @@
+;; -*- Prcs -*-
+(Created-By-Prcs-Version 1 3 0)
+(Project-Description "")
+(Project-Version schedule-tools schedule-tools-0-8-2 1)
+(Parent-Version schedule-tools schedule-tools-0-8-1 3)
+(Version-Log "")
+(New-Version-Log "")
+(Checkin-Time "Thu, 18 Jul 2002 10:35:19 -0400")
+(Checkin-Login trockij)
+(Populate-Ignore ())
+(Project-Keywords)
+(Files
+;; This is a comment.  Fill in files here.
+;; For example:  (prcs/checkout.cc ())
+
+;; Files added by populate at Mon, 10 Dec 2001 17:02:43 -0500,
+;; to version 0.1(w), by trockij:
+
+  (sched-report (schedule-tools/0_sched-repo 1.9 755))
+
+;; Files added by populate at Mon, 10 Dec 2001 17:02:47 -0500,
+;; to version 0.1(w), by trockij:
+
+  (test-sched (schedule-tools/1_test-sched 1.5 644))
+
+;; Files added by populate at Tue, 11 Dec 2001 23:34:53 -0500,
+;; to version 0.5(w), by trockij:
+
+  (README (schedule-tools/2_README 1.4 644))
+
+;; Files added by populate at Thu, 13 Dec 2001 21:47:03 -0500,
+;; to version 0.8(w), by trockij:
+
+  (sched-populate (schedule-tools/3_sched-popu 1.2 755))
+  (COPYRIGHT (schedule-tools/4_COPYRIGHT 1.2 644))
+  (COPYING (schedule-tools/5_COPYING 1.1 644))
+
+;; Files added by populate at Mon, 17 Dec 2001 17:41:24 -0500,
+;; to version 0.10(w), by trockij:
+
+  (make-test-sched (schedule-tools/6_make-test- 1.1 755))
+)
+(Merge-Parents)
+(New-Merge-Parents)
